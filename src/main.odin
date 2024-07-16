@@ -128,7 +128,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		assert(len(out_buffer.buf) == 24)
 
 		// Program entry offset.
-		program_entry_offset: u64 = program_headers[1].p_offset
+		program_entry_offset: u64 = program_headers[1].p_vaddr
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&program_entry_offset)) or_return
 		// Program header table offset.
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&elf_header_size)) or_return
