@@ -341,22 +341,16 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		bytes.buffer_write(out, []u8{0x6a, op_u8})
 
 	case AsmLea:
-		rex: u8 = 0x48
-		modrm1: u8 = 0
-		modrm2: u8 = 0
+		mask_64_bits_mode: u8 = 0b1000
+		rex: u8 = 0b0100_0000 | mask_64_bits_mode
+		modrm1: u8 = asm_register_numeric_value(v.op1) << 3 | 0b100
 
 		op2, is_effective_address := v.op2.(AsmEffectiveAddress)
 		assert(is_effective_address, "unimplemented")
 
-		bytes.buffer_write(
-			out,
-			[]u8 {
-				rex,
-				0x8d,
-				modrm1 + asm_register_numeric_value(v.op1),
-				modrm2 + asm_register_numeric_value(op2.op),
-			},
-		)
+		modrm2: u8 = asm_register_numeric_value(op2.op) << 3 | 0b100
+
+		bytes.buffer_write(out, []u8{rex, 0x8d, modrm1, modrm2})
 
 	}
 
