@@ -45,14 +45,17 @@ ElfSectionHeader :: struct #packed {
 }
 #assert(size_of(ElfSectionHeader) == 64)
 
-write_elf_exe :: proc(path: string, code: []AsmInstruction) -> (err: io.Error) {
+write_elf_exe :: proc(path: string, code: []AsmBlock) -> (err: io.Error) {
 
 	code_encoded := []u8{}
 	{
 		out_code := bytes.Buffer{}
-		for instr in code {
-			encode_asm_instruction(&out_code, instr)
+		for block in code {
+			for instr in block.instructions {
+				encode_asm_instruction(&out_code, instr)
+			}
 		}
+
 		code_encoded = out_code.buf[:]
 	}
 
@@ -238,6 +241,16 @@ AsmInstruction :: union {
 	AsmMov,
 }
 
+AsmBlockFlags :: enum {
+	Global,
+}
+
+AsmBlock :: struct {
+	name:         string,
+	flags:        AsmBlockFlags,
+	instructions: []AsmInstruction,
+}
+
 
 asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
 	switch reg {
@@ -274,10 +287,16 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 main :: proc() {
 	syscall_linux_exit: u32 = 60
 	exit_code: u32 = 2
-	code := []AsmInstruction {
-		AsmMov{op1 = AsmRegister.Eax, op2 = AsmImmediate(syscall_linux_exit)},
-		AsmMov{op1 = AsmRegister.Edi, op2 = AsmImmediate(exit_code)},
-		AsmSyscall{},
+	code := []AsmBlock {
+		 {
+			name = "_start",
+			flags = .Global,
+			instructions = []AsmInstruction {
+				AsmMov{op1 = AsmRegister.Eax, op2 = AsmImmediate(syscall_linux_exit)},
+				AsmMov{op1 = AsmRegister.Edi, op2 = AsmImmediate(exit_code)},
+				AsmSyscall{},
+			},
+		},
 	}
 
 	write_elf_exe("test.bin", code)
