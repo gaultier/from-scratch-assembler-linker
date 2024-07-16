@@ -214,6 +214,7 @@ write_elf_exe :: proc(path: string, code: []AsmBlock) -> (err: io.Error) {
 AsmRegister :: enum {
 	Eax,
 	Edi,
+	Edx,
 	// Etc.
 }
 
@@ -268,6 +269,8 @@ asm_register_size :: proc(reg: AsmRegister) -> u8 {
 		return 32
 	case .Edi:
 		return 32
+	case .Edx:
+		return 32
 	}
 	return 0
 }
@@ -276,6 +279,8 @@ asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
 	switch reg {
 	case .Eax:
 		return 0
+	case .Edx:
+		return 2
 	case .Edi:
 		return 7
 	}
@@ -319,7 +324,15 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 main :: proc() {
 	syscall_linux_exit: u32 = 60
 	exit_code: u32 = 2
+
+	syscall_linux_write: u32 = 1
+	stdout: u32 = 1
 	c1: u8 = 'h'
+	c2: u8 = 'e'
+	c3: u8 = 'l'
+	c4: u8 = 'l'
+	c5: u8 = 'o'
+	msg_len: u32 = 5
 
 	code := []AsmBlock {
 		 {
@@ -327,6 +340,13 @@ main :: proc() {
 			flags = .Global,
 			instructions = []AsmInstruction {
 				AsmPush{op = AsmImmediate(c1)},
+				AsmPush{op = AsmImmediate(c2)},
+				AsmPush{op = AsmImmediate(c3)},
+				AsmPush{op = AsmImmediate(c4)},
+				AsmPush{op = AsmImmediate(c5)},
+				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_write)},
+				AsmMov{op1 = .Edi, op2 = AsmImmediate(stdout)},
+				AsmMov{op1 = .Edx, op2 = AsmImmediate(msg_len)},
 				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_exit - 1)},
 				AsmInc{op = .Eax},
 				AsmMov{op1 = .Edi, op2 = AsmImmediate(exit_code)},
