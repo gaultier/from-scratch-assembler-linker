@@ -2,16 +2,45 @@ package main
 
 import "core:bytes"
 import "core:io"
+import "core:mem"
 import "core:os"
 import "core:strings"
 import "core:sys/linux"
 
+ElfProgramHeaderTypeLoad: u32 : 1
+ElfProgramHeaderFlagsExecutable: u32 : 1
+
+ElfProgramHeader :: struct #packed {
+	type:      u32,
+	p_offset:  u64,
+	p_vaddr:   u64,
+	p_paddr:   u64,
+	p_filesz:  u64,
+	p_memsz:   u64,
+	flags:     u32,
+	alignment: u64,
+}
+#assert(size_of(ElfProgramHeader) == 56)
 
 write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 
 	out_buffer := bytes.Buffer{}
 	bytes.buffer_grow(&out_buffer, 4 * 1024)
 
+	// Header
+
+	program_headers := []ElfProgramHeader {
+		 {
+			type = ElfProgramHeaderTypeLoad,
+			p_offset = 0,
+			p_vaddr = 0x400000,
+			p_paddr = 0x400000,
+			p_filesz = cast(u64)(len(text)),
+			p_memsz = cast(u64)(len(text)),
+			flags = ElfProgramHeaderFlagsExecutable,
+			alignment = 0x1000,
+		},
+	}
 	{
 		ELF_MAGIC: []u8 : {0x7f, 'E', 'L', 'F'}
 		bytes.buffer_write(&out_buffer, ELF_MAGIC) or_return
@@ -38,13 +67,20 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		assert(len(out_buffer.buf) == 52)
 
 		bytes.buffer_write(&out_buffer, []u8{64, 0}) or_return // ELF header size.
-		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Size of an entry in the program header table.
-		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Number of entries in the program header table.
+		bytes.buffer_write(&out_buffer, []u8{size_of(ElfProgramHeader), 0}) or_return // Size of an entry in the program header table.
+		bytes.buffer_write(&out_buffer, []u8{cast(u8)(len(program_headers)), 0}) or_return // Number of entries in the program header table.
 		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Size of an entry in the section header table.
 		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Number of entries in the section header table.
 		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Section index in the section header table.
 
 		assert(len(out_buffer.buf) == 64)
+	}
+	// Program headers.
+	{
+
+		for &ph in program_headers {
+			bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&ph)) or_return
+		}
 	}
 
 	file, err_open := os.open(path, os.O_WRONLY | os.O_CREATE)
