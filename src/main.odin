@@ -60,22 +60,30 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			p_offset = 0,
 			p_vaddr = 0x400000,
 			p_paddr = 0x400000,
+			flags = ElfProgramHeaderFlagsReadable,
+			alignment = page_size,
+		},
+		 {
+			type = ElfProgramHeaderTypeLoad,
+			p_offset = page_size,
+			p_vaddr = 0x400000 + page_size,
+			p_paddr = 0x400000 + page_size,
 			p_filesz = cast(u64)(len(text)),
 			p_memsz = cast(u64)(len(text)),
 			flags = ElfProgramHeaderFlagsExecutable | ElfProgramHeaderFlagsReadable,
 			alignment = page_size,
 		},
 	}
+	program_headers_size_unpadded: u64 =
+		elf_header_size + cast(u64)len(program_headers) * size_of(ElfProgramHeader)
 	program_headers_alignment := cast(u64)math.next_power_of_two(
-		elf_header_size + len(program_headers) * size_of(ElfProgramHeader),
+		cast(int)program_headers_size_unpadded,
 	)
-	fmt.println(program_headers_alignment)
+	// Backpatch.
+	program_headers[0].p_filesz = program_headers_size_unpadded
+	program_headers[0].p_memsz = program_headers_size_unpadded
 
 	elf_strings := []string{".shstrtab", ".text"}
-	elf_strings_size: u64 = 1 // Null string.
-	for s in elf_strings {
-		elf_strings_size += cast(u64)len(s) + 1 // Null terminator
-	}
 	section_headers := []ElfSectionHeader {
 		// Null
 		{},
@@ -93,9 +101,9 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			name = 0,
 			type = ElfSectionHeaderTypeStrTab,
 			flags = ElfSectionHeaderFlagAlloc | ElfSectionHeaderFlagExecInstr,
-			addr = 0x400000,
+			addr = 0,
 			offset = page_size + cast(u64)(len(text)),
-			size = elf_strings_size,
+			size = 0,
 			align = 1,
 		},
 	}
@@ -146,7 +154,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&ph)) or_return
 	}
 
-	for _ in len(out_buffer.buf) ..< cast(int)program_headers_alignment {
+	for _ in len(out_buffer.buf) ..< cast(int)page_size {
 		bytes.buffer_write_byte(&out_buffer, 0) or_return // Pad.
 	}
 
