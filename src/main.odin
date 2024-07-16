@@ -383,6 +383,7 @@ main :: proc() {
 				AsmMov{op1 = .Edi, op2 = AsmImmediate(stdout)},
 				AsmLea{op1 = .Rsi, op2 = AsmEffectiveAddress{op = .Rsp}},
 				AsmMov{op1 = .Edx, op2 = AsmImmediate(msg_len)},
+				AsmSyscall{},
 				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_exit - 1)},
 				AsmInc{op = .Eax},
 				AsmMov{op1 = .Edi, op2 = AsmImmediate(exit_code)},
