@@ -22,6 +22,23 @@ ElfProgramHeader :: struct #packed {
 }
 #assert(size_of(ElfProgramHeader) == 56)
 
+ElfSectionHeaderTypeProgBits : u32 : 1
+ElfSectionHeaderFlagAlloc : u64 : 2
+ElfSectionHeaderFlagExecInstr : u64 : 4
+ElfSectionHeader :: struct #packed {
+	name:    u32,
+	type:    u32,
+	flags:   u64,
+	addr:    u64,
+	offset:  u64,
+	size:    u64,
+	link:    u32,
+	info:    u32,
+	align:   u64,
+	entsize: u64,
+}
+#assert(size_of(ElfSectionHeader) == 64)
+
 write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 
 	out_buffer := bytes.Buffer{}
@@ -40,6 +57,17 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			flags = ElfProgramHeaderFlagsExecutable,
 			alignment = 0x1000,
 		},
+	}
+	section_headers := []ElfSectionHeader{
+		{
+			name = 0,
+			type= ElfSectionHeaderTypeProgBits,
+			flags = ElfSectionHeaderFlagAlloc | ElfSectionHeaderFlagExecInstr,
+			addr = 0x400000,
+			offset = 0, // FIXME
+			size = cast(u64)(len(text)),
+			align = 1, // FIXME?
+		}
 	}
 	{
 		ELF_MAGIC: []u8 : {0x7f, 'E', 'L', 'F'}
@@ -69,18 +97,19 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		bytes.buffer_write(&out_buffer, []u8{64, 0}) or_return // ELF header size.
 		bytes.buffer_write(&out_buffer, []u8{size_of(ElfProgramHeader), 0}) or_return // Size of an entry in the program header table.
 		bytes.buffer_write(&out_buffer, []u8{cast(u8)(len(program_headers)), 0}) or_return // Number of entries in the program header table.
-		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Size of an entry in the section header table.
-		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Number of entries in the section header table.
+		bytes.buffer_write(&out_buffer, []u8{size_of(ElfSectionHeader), 0}) or_return // Size of an entry in the section header table.
+		bytes.buffer_write(&out_buffer, []u8{cast(u8)(len(section_headers)), 0}) or_return // Number of entries in the section header table.
 		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Section index in the section header table.
 
 		assert(len(out_buffer.buf) == 64)
 	}
-	// Program headers.
-	{
 
-		for &ph in program_headers {
-			bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&ph)) or_return
-		}
+	for &sh in section_headers {
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&sh)) or_return
+	}
+
+	for &ph in program_headers {
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&ph)) or_return
 	}
 
 	file, err_open := os.open(path, os.O_WRONLY | os.O_CREATE)
