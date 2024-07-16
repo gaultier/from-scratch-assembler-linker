@@ -52,7 +52,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 
 	// Header
 
-	elf_header_size :: 64
+	elf_header_size: u64 = 64
 	page_size: u64 = 0x1000
 	program_headers := []ElfProgramHeader {
 		 {
@@ -123,11 +123,17 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		assert(len(out_buffer.buf) == 24)
 
 		// Program entry offset.
-		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return
+		program_entry_offset: u64 = program_headers[1].p_offset
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&program_entry_offset)) or_return
 		// Program header table offset.
-		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&elf_header_size)) or_return
 		// Section header table offset.
-		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return
+		strings_size: u64 = 1
+		for s in elf_strings {
+			strings_size += cast(u64)len(s) + 1 // Null terminator.
+		}
+		section_header_table_offset: u64 = page_size + cast(u64)len(text) + strings_size
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&section_header_table_offset)) or_return
 
 
 		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0}) or_return // Flags.
