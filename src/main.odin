@@ -45,7 +45,16 @@ ElfSectionHeader :: struct #packed {
 }
 #assert(size_of(ElfSectionHeader) == 64)
 
-write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
+write_elf_exe :: proc(path: string, code: []AsmInstruction) -> (err: io.Error) {
+
+	code_encoded := []u8{}
+	{
+		out_code := bytes.Buffer{}
+		for instr in code {
+			encode_asm_instruction(&out_code, instr)
+		}
+		code_encoded = out_code.buf[:]
+	}
 
 	out_buffer := bytes.Buffer{}
 	bytes.buffer_grow(&out_buffer, 4 * 1024)
@@ -69,8 +78,8 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			p_offset = page_size,
 			p_vaddr = start_vm + page_size,
 			p_paddr = start_vm + page_size,
-			p_filesz = cast(u64)(len(text)),
-			p_memsz = cast(u64)(len(text)),
+			p_filesz = cast(u64)(len(code_encoded)),
+			p_memsz = cast(u64)(len(code_encoded)),
 			flags = ElfProgramHeaderFlagsExecutable | ElfProgramHeaderFlagsReadable,
 			alignment = page_size,
 		},
@@ -99,7 +108,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			flags = ElfSectionHeaderFlagExecInstr | ElfSectionHeaderFlagAlloc,
 			addr = start_vm + page_size,
 			offset = page_size,
-			size = cast(u64)(len(text)),
+			size = cast(u64)(len(code_encoded)),
 			align = 1,
 		},
 		// Strings
@@ -108,7 +117,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			type = ElfSectionHeaderTypeStrTab,
 			flags = 0,
 			addr = 0,
-			offset = page_size + cast(u64)(len(text)),
+			offset = page_size + cast(u64)(len(code_encoded)),
 			size = strings_size,
 			align = 1,
 		},
@@ -134,7 +143,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		// Program header table offset.
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&elf_header_size)) or_return
 		// Section header table offset.
-		section_header_table_offset: u64 = page_size + cast(u64)len(text) + strings_size
+		section_header_table_offset: u64 = page_size + cast(u64)len(code_encoded) + strings_size
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&section_header_table_offset)) or_return
 
 
@@ -166,7 +175,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		bytes.buffer_write_byte(&out_buffer, 0) or_return // Pad.
 	}
 
-	bytes.buffer_write(&out_buffer, text) or_return
+	bytes.buffer_write(&out_buffer, code_encoded) or_return
 
 	bytes.buffer_write_byte(&out_buffer, 0) or_return // Null string.
 	for s in elf_strings {
@@ -253,7 +262,9 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 
 		#partial switch y in op2 {
 		case u32:
-			bytes.buffer_write(out, []u8{0xb8 + asm_register_numeric_value(op1), 0x3c})
+			bytes.buffer_write_byte(out, 0xb8 + asm_register_numeric_value(op1))
+			value := y
+			bytes.buffer_write(out, mem.ptr_to_bytes(&value))
 		case:
 			assert(false, "unimplemented")
 		}
@@ -269,8 +280,5 @@ main :: proc() {
 		AsmSyscall{},
 	}
 
-	write_elf_exe(
-		"test.bin",
-		[]u8{0xb8, 0x3c, 0x00, 0x00, 0x00, 0xbf, 0x02, 0x00, 0x00, 0x00, 0x0f, 0x05},
-	)
+	write_elf_exe("test.bin", code)
 }
