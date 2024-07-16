@@ -84,13 +84,18 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 	program_headers[0].p_memsz = program_headers_size_unpadded
 
 	elf_strings := []string{".shstrtab", ".text"}
+	strings_size: u64 = 1
+	for s in elf_strings {
+		strings_size += cast(u64)len(s) + 1 // Null terminator.
+	}
 	section_headers := []ElfSectionHeader {
 		// Null
 		{},
 		// Code
 		 {
-			name = 1,
+			name = 11,
 			type = ElfSectionHeaderTypeProgBits,
+			flags = ElfSectionHeaderFlagExecInstr | ElfSectionHeaderFlagAlloc,
 			addr = 0x401000,
 			offset = page_size,
 			size = cast(u64)(len(text)),
@@ -98,12 +103,12 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		},
 		// Strings
 		 {
-			name = 0,
+			name = 1,
 			type = ElfSectionHeaderTypeStrTab,
-			flags = ElfSectionHeaderFlagAlloc | ElfSectionHeaderFlagExecInstr,
+			flags = 0,
 			addr = 0,
 			offset = page_size + cast(u64)(len(text)),
-			size = 0,
+			size = strings_size,
 			align = 1,
 		},
 	}
@@ -128,10 +133,6 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		// Program header table offset.
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&elf_header_size)) or_return
 		// Section header table offset.
-		strings_size: u64 = 1
-		for s in elf_strings {
-			strings_size += cast(u64)len(s) + 1 // Null terminator.
-		}
 		section_header_table_offset: u64 = page_size + cast(u64)len(text) + strings_size
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&section_header_table_offset)) or_return
 
