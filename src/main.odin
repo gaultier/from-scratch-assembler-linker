@@ -18,8 +18,12 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 
 		bytes.buffer_write_byte(&out_buffer, 2) or_return // 64 bit.
 		bytes.buffer_write_byte(&out_buffer, 1) or_return // Little-endian.
-		bytes.buffer_write_byte(&out_buffer, 1) or_return // Version.
+		bytes.buffer_write_byte(&out_buffer, 1) or_return // ELF header version = 1.
+		bytes.buffer_write_byte(&out_buffer, 0) or_return // OS ABI, 0 = System V.
 		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return // Padding.
+		bytes.buffer_write(&out_buffer, []u8{2, 0}) or_return // Type: Executable.
+		bytes.buffer_write(&out_buffer, []u8{0x3e, 0}) or_return // ISA x86_64.
+		bytes.buffer_write(&out_buffer, []u8{0x1, 0, 0, 0}) or_return // ELF version = 1.
 	}
 
 	file, err_open := os.open(path, os.O_WRONLY | os.O_CREATE)
