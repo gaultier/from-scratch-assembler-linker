@@ -24,6 +24,27 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 		bytes.buffer_write(&out_buffer, []u8{2, 0}) or_return // Type: Executable.
 		bytes.buffer_write(&out_buffer, []u8{0x3e, 0}) or_return // ISA x86_64.
 		bytes.buffer_write(&out_buffer, []u8{0x1, 0, 0, 0}) or_return // ELF version = 1.
+		assert(len(out_buffer.buf) == 24)
+
+		// Program entry offset.
+		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return
+		// Program header table offset.
+		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return
+		// Section header table offset.
+		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return
+
+
+		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0}) or_return // Flags.
+		assert(len(out_buffer.buf) == 52)
+
+		bytes.buffer_write(&out_buffer, []u8{64, 0}) or_return // ELF header size.
+		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Size of an entry in the program header table.
+		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Number of entries in the program header table.
+		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Size of an entry in the section header table.
+		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Number of entries in the section header table.
+		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Section index in the section header table.
+
+		assert(len(out_buffer.buf) == 64)
 	}
 
 	file, err_open := os.open(path, os.O_WRONLY | os.O_CREATE)
