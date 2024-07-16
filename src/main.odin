@@ -199,7 +199,76 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 	return {}
 }
 
+AsmRegister :: enum {
+	Eax,
+	Edi,
+	// Etc.
+}
+
+AsmImmediate :: union {
+	u8,
+	u16,
+	u32,
+	u64,
+}
+
+AsmOperand :: union {
+	AsmRegister,
+	AsmImmediate,
+}
+
+AsmSyscall :: struct {}
+
+AsmMov :: struct {
+	op1: AsmOperand,
+	op2: AsmOperand,
+}
+
+AsmInstruction :: union {
+	AsmSyscall,
+	AsmMov,
+}
+
+
+asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
+	switch reg {
+	case .Eax:
+		return 0
+	case .Edi:
+		return 7
+	}
+	return 0
+}
+
+encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
+	switch v in instr {
+	case AsmSyscall:
+		bytes.buffer_write(out, []u8{0x0f, 0x05})
+	case AsmMov:
+		op1, is_op1_reg := v.op1.(AsmRegister)
+		assert(is_op1_reg)
+
+		op2, is_op2_immediate := v.op2.(AsmImmediate)
+		assert(is_op2_immediate, "unimplemented")
+
+		#partial switch y in op2 {
+		case u32:
+			bytes.buffer_write(out, []u8{0xb8 + asm_register_numeric_value(op1), 0x3c})
+		case:
+			assert(false, "unimplemented")
+		}
+	}
+}
+
 main :: proc() {
+	syscall_linux_exit: u32 = 60
+	exit_code: u32 = 2
+	code := []AsmInstruction {
+		AsmMov{op1 = AsmRegister.Eax, op2 = AsmImmediate(syscall_linux_exit)},
+		AsmMov{op1 = AsmRegister.Edi, op2 = AsmImmediate(exit_code)},
+		AsmSyscall{},
+	}
+
 	write_elf_exe(
 		"test.bin",
 		[]u8{0xb8, 0x3c, 0x00, 0x00, 0x00, 0xbf, 0x02, 0x00, 0x00, 0x00, 0x0f, 0x05},
