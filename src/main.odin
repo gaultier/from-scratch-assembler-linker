@@ -1,7 +1,9 @@
 package main
 
 import "core:bytes"
+import "core:fmt"
 import "core:io"
+import "core:math"
 import "core:mem"
 import "core:os"
 import "core:strings"
@@ -9,22 +11,26 @@ import "core:sys/linux"
 
 ElfProgramHeaderTypeLoad: u32 : 1
 ElfProgramHeaderFlagsExecutable: u32 : 1
+ElfProgramHeaderFlagsReadable: u32 : 4
 
 ElfProgramHeader :: struct #packed {
 	type:      u32,
+	flags:     u32,
 	p_offset:  u64,
 	p_vaddr:   u64,
 	p_paddr:   u64,
 	p_filesz:  u64,
 	p_memsz:   u64,
-	flags:     u32,
 	alignment: u64,
 }
 #assert(size_of(ElfProgramHeader) == 56)
 
-ElfSectionHeaderTypeProgBits : u32 : 1
-ElfSectionHeaderFlagAlloc : u64 : 2
-ElfSectionHeaderFlagExecInstr : u64 : 4
+ElfSectionHeaderTypeProgBits: u32 : 1
+ElfSectionHeaderTypeStrTab: u32 : 3
+
+ElfSectionHeaderFlagAlloc: u64 : 2
+ElfSectionHeaderFlagExecInstr: u64 : 4
+
 ElfSectionHeader :: struct #packed {
 	name:    u32,
 	type:    u32,
@@ -46,6 +52,8 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 
 	// Header
 
+	elf_header_size :: 64
+	page_size: u64 = 0x1000
 	program_headers := []ElfProgramHeader {
 		 {
 			type = ElfProgramHeaderTypeLoad,
@@ -54,21 +62,44 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			p_paddr = 0x400000,
 			p_filesz = cast(u64)(len(text)),
 			p_memsz = cast(u64)(len(text)),
-			flags = ElfProgramHeaderFlagsExecutable,
-			alignment = 0x1000,
+			flags = ElfProgramHeaderFlagsExecutable | ElfProgramHeaderFlagsReadable,
+			alignment = page_size,
 		},
 	}
-	section_headers := []ElfSectionHeader{
-		{
+	program_headers_alignment := cast(u64)math.next_power_of_two(
+		elf_header_size + len(program_headers) * size_of(ElfProgramHeader),
+	)
+	fmt.println(program_headers_alignment)
+
+	elf_strings := []string{".shstrtab", ".text"}
+	elf_strings_size: u64 = 1 // Null string.
+	for s in elf_strings {
+		elf_strings_size += cast(u64)len(s) + 1 // Null terminator
+	}
+	section_headers := []ElfSectionHeader {
+		// Null
+		{},
+		// Code
+		 {
+			name = 1,
+			type = ElfSectionHeaderTypeProgBits,
+			addr = 0x401000,
+			offset = page_size,
+			size = cast(u64)(len(text)),
+			align = 1,
+		},
+		// Strings
+		 {
 			name = 0,
-			type= ElfSectionHeaderTypeProgBits,
+			type = ElfSectionHeaderTypeStrTab,
 			flags = ElfSectionHeaderFlagAlloc | ElfSectionHeaderFlagExecInstr,
 			addr = 0x400000,
-			offset = 0, // FIXME
-			size = cast(u64)(len(text)),
-			align = 1, // FIXME?
-		}
+			offset = page_size + cast(u64)(len(text)),
+			size = elf_strings_size,
+			align = 1,
+		},
 	}
+
 	{
 		ELF_MAGIC: []u8 : {0x7f, 'E', 'L', 'F'}
 		bytes.buffer_write(&out_buffer, ELF_MAGIC) or_return
@@ -96,21 +127,41 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 
 		bytes.buffer_write(&out_buffer, []u8{64, 0}) or_return // ELF header size.
 		bytes.buffer_write(&out_buffer, []u8{size_of(ElfProgramHeader), 0}) or_return // Size of an entry in the program header table.
-		bytes.buffer_write(&out_buffer, []u8{cast(u8)(len(program_headers)), 0}) or_return // Number of entries in the program header table.
-		bytes.buffer_write(&out_buffer, []u8{size_of(ElfSectionHeader), 0}) or_return // Size of an entry in the section header table.
-		bytes.buffer_write(&out_buffer, []u8{cast(u8)(len(section_headers)), 0}) or_return // Number of entries in the section header table.
-		bytes.buffer_write(&out_buffer, []u8{0, 0}) or_return // Section index in the section header table.
+		program_headers_len := cast(u16)(len(program_headers))
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&program_headers_len)) or_return // Number of entries in the program header table.
+		section_headers_entry_size := cast(u16)size_of(ElfSectionHeader)
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&section_headers_entry_size)) or_return // Size of an entry in the section header table.
+		section_headers_len := cast(u16)len(section_headers)
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&section_headers_len)) or_return // Number of entries in the section header table.
+
+		section_header_string_table_index: u16 = 2
+		bytes.buffer_write(
+			&out_buffer,
+			mem.ptr_to_bytes(&section_header_string_table_index),
+		) or_return // Section index in the section header table.
 
 		assert(len(out_buffer.buf) == 64)
+	}
+	for &ph in program_headers {
+		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&ph)) or_return
+	}
+
+	for _ in len(out_buffer.buf) ..< cast(int)program_headers_alignment {
+		bytes.buffer_write_byte(&out_buffer, 0) or_return // Pad.
+	}
+
+	bytes.buffer_write(&out_buffer, text) or_return
+
+	bytes.buffer_write_byte(&out_buffer, 0) or_return // Null string.
+	for s in elf_strings {
+		bytes.buffer_write(&out_buffer, transmute([]u8)s) or_return
+		bytes.buffer_write_byte(&out_buffer, 0) or_return // Null terminator.
 	}
 
 	for &sh in section_headers {
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&sh)) or_return
 	}
 
-	for &ph in program_headers {
-		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&ph)) or_return
-	}
 
 	file, err_open := os.open(path, os.O_WRONLY | os.O_CREATE)
 	assert(err_open == {})
