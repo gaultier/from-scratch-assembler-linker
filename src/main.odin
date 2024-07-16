@@ -240,10 +240,16 @@ AsmInc :: struct {
 	op: AsmRegister,
 }
 
+AsmPush :: struct {
+	op: AsmOperand,
+}
+
+
 AsmInstruction :: union {
 	AsmSyscall,
 	AsmMov,
 	AsmInc,
+	AsmPush,
 }
 
 AsmBlockFlags :: enum {
@@ -297,17 +303,30 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		reg_size := asm_register_size(v.op)
 		assert(reg_size == 32, "unimplemented")
 		bytes.buffer_write(out, []u8{0xff, modrm + asm_register_numeric_value(v.op)})
+
+	case AsmPush:
+		op, is_op_immediate := v.op.(AsmImmediate)
+		assert(is_op_immediate, "unimplemented")
+
+		op_u8, is_u8 := op.(u8)
+		assert(is_u8, "unimplemented")
+
+		bytes.buffer_write(out, []u8{0x6a, op_u8})
 	}
+
 }
 
 main :: proc() {
 	syscall_linux_exit: u32 = 60
 	exit_code: u32 = 2
+	c1: u8 = 'h'
+
 	code := []AsmBlock {
 		 {
 			name = "_start",
 			flags = .Global,
 			instructions = []AsmInstruction {
+				AsmPush{op = AsmImmediate(c1)},
 				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_exit - 1)},
 				AsmInc{op = .Eax},
 				AsmMov{op1 = .Edi, op2 = AsmImmediate(exit_code)},
