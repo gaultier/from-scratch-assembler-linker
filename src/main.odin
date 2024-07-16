@@ -8,13 +8,19 @@ import "core:sys/linux"
 
 
 write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
-	ELF_MAGIC: []u8 : {0x7f, 'E', 'L', 'F'}
-
 
 	out_buffer := bytes.Buffer{}
 	bytes.buffer_grow(&out_buffer, 4 * 1024)
 
-	bytes.buffer_write(&out_buffer, ELF_MAGIC) or_return
+	{
+		ELF_MAGIC: []u8 : {0x7f, 'E', 'L', 'F'}
+		bytes.buffer_write(&out_buffer, ELF_MAGIC) or_return
+
+		bytes.buffer_write_byte(&out_buffer, 2) or_return // 64 bit.
+		bytes.buffer_write_byte(&out_buffer, 1) or_return // Little-endian.
+		bytes.buffer_write_byte(&out_buffer, 1) or_return // Version.
+		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0, 0, 0, 0, 0}) or_return // Padding.
+	}
 
 	file, err_open := os.open(path, os.O_WRONLY | os.O_CREATE)
 	assert(err_open == {})
