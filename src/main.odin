@@ -53,21 +53,22 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 	// Header
 
 	elf_header_size: u64 = 64
+	start_vm: u64 = 1 << 22
 	page_size: u64 = 0x1000
 	program_headers := []ElfProgramHeader {
 		 {
 			type = ElfProgramHeaderTypeLoad,
 			p_offset = 0,
-			p_vaddr = 0x400000,
-			p_paddr = 0x400000,
+			p_vaddr = start_vm,
+			p_paddr = start_vm,
 			flags = ElfProgramHeaderFlagsReadable,
 			alignment = page_size,
 		},
 		 {
 			type = ElfProgramHeaderTypeLoad,
 			p_offset = page_size,
-			p_vaddr = 0x400000 + page_size,
-			p_paddr = 0x400000 + page_size,
+			p_vaddr = start_vm + page_size,
+			p_paddr = start_vm + page_size,
 			p_filesz = cast(u64)(len(text)),
 			p_memsz = cast(u64)(len(text)),
 			flags = ElfProgramHeaderFlagsExecutable | ElfProgramHeaderFlagsReadable,
@@ -96,7 +97,7 @@ write_elf_exe :: proc(path: string, text: []u8) -> (err: io.Error) {
 			name = 11,
 			type = ElfSectionHeaderTypeProgBits,
 			flags = ElfSectionHeaderFlagExecInstr | ElfSectionHeaderFlagAlloc,
-			addr = 0x401000,
+			addr = start_vm + page_size,
 			offset = page_size,
 			size = cast(u64)(len(text)),
 			align = 1,
