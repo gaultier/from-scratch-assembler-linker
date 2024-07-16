@@ -215,6 +215,8 @@ AsmRegister :: enum {
 	Eax,
 	Edi,
 	Edx,
+	Rsi,
+	Rsp,
 	// Etc.
 }
 
@@ -225,9 +227,15 @@ AsmImmediate :: union {
 	u64,
 }
 
+// TODO: Expand
+AsmEffectiveAddress :: struct {
+	op: AsmRegister,
+}
+
 AsmOperand :: union {
 	AsmRegister,
 	AsmImmediate,
+	AsmEffectiveAddress,
 }
 
 AsmSyscall :: struct {}
@@ -245,12 +253,18 @@ AsmPush :: struct {
 	op: AsmOperand,
 }
 
+AsmLea :: struct {
+	op1: AsmRegister,
+	op2: AsmOperand,
+}
+
 
 AsmInstruction :: union {
 	AsmSyscall,
 	AsmMov,
 	AsmInc,
 	AsmPush,
+	AsmLea,
 }
 
 AsmBlockFlags :: enum {
@@ -271,6 +285,10 @@ asm_register_size :: proc(reg: AsmRegister) -> u8 {
 		return 32
 	case .Edx:
 		return 32
+	case .Rsp:
+		return 64
+	case .Rsi:
+		return 64
 	}
 	return 0
 }
@@ -283,6 +301,10 @@ asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
 		return 2
 	case .Edi:
 		return 7
+	case .Rsp:
+		return 4
+	case .Rsi:
+		return 6
 	}
 	return 0
 }
@@ -317,6 +339,25 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		assert(is_u8, "unimplemented")
 
 		bytes.buffer_write(out, []u8{0x6a, op_u8})
+
+	case AsmLea:
+		rex: u8 = 0x48
+		modrm1: u8 = 0
+		modrm2: u8 = 0
+
+		op2, is_effective_address := v.op2.(AsmEffectiveAddress)
+		assert(is_effective_address, "unimplemented")
+
+		bytes.buffer_write(
+			out,
+			[]u8 {
+				rex,
+				0x8d,
+				modrm1 + asm_register_numeric_value(v.op1),
+				modrm2 + asm_register_numeric_value(op2.op),
+			},
+		)
+
 	}
 
 }
@@ -346,6 +387,7 @@ main :: proc() {
 				AsmPush{op = AsmImmediate(c5)},
 				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_write)},
 				AsmMov{op1 = .Edi, op2 = AsmImmediate(stdout)},
+				AsmLea{op1 = .Rsi, op2 = AsmEffectiveAddress{op = .Rsp}},
 				AsmMov{op1 = .Edx, op2 = AsmImmediate(msg_len)},
 				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_exit - 1)},
 				AsmInc{op = .Eax},
