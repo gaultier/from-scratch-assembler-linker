@@ -256,6 +256,15 @@ AsmBlock :: struct {
 	instructions: []AsmInstruction,
 }
 
+asm_register_size :: proc(reg: AsmRegister) -> u8 {
+	switch reg {
+	case .Eax:
+		return 32
+	case .Edi:
+		return 32
+	}
+	return 0
+}
 
 asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
 	switch reg {
@@ -285,6 +294,8 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		}
 	case AsmInc:
 		modrm: u8 = 0b1100_0000
+		reg_size := asm_register_size(v.op)
+		assert(reg_size == 32, "unimplemented")
 		bytes.buffer_write(out, []u8{0xff, modrm + asm_register_numeric_value(v.op)})
 	}
 }
