@@ -222,9 +222,15 @@ AsmImmediate :: union {
 	u64,
 }
 
-// TODO: Expand
-AsmEffectiveAddress :: struct {
-	op: AsmRegister,
+AsmDisplacement :: struct {
+	base:  AsmRegister,
+	Index: AsmRegister,
+	Scale: u8,
+}
+
+AsmEffectiveAddress :: union {
+	AsmRegister,
+	AsmDisplacement,
 }
 
 AsmOperand :: union {
@@ -371,7 +377,10 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		op2, is_effective_address := v.op2.(AsmEffectiveAddress)
 		assert(is_effective_address, "unimplemented")
 
-		modrm2: u8 = asm_register_numeric_value(op2.op) << 3 | 0b100
+		op2_reg, is_op2_reg := op2.(AsmRegister)
+		assert(is_op2_reg, "unimplemented")
+
+		modrm2: u8 = asm_register_numeric_value(op2_reg) << 3 | 0b100
 
 		bytes.buffer_write(out, []u8{rex, 0x8d, modrm1, modrm2})
 
@@ -429,15 +438,16 @@ main :: proc() {
 			flags = .Global,
 			instructions = []AsmInstruction {
 				AsmSub{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
+				AsmMov{op1 = AsmEffectiveAddress{}, op2 = AsmImmediate(syscall_linux_write)},
 				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
-				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_write)},
-				AsmMov{op1 = .Edi, op2 = AsmImmediate(stdout)},
-				AsmLea{op1 = .Rsi, op2 = AsmEffectiveAddress{op = .Rsp}},
-				AsmMov{op1 = .Edx, op2 = AsmImmediate(msg_len)},
+				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_write)},
+				AsmMov{op1 = AsmRegister(.Edi), op2 = AsmImmediate(stdout)},
+				AsmLea{op1 = .Rsi, op2 = AsmEffectiveAddress(.Rsp)},
+				AsmMov{op1 = AsmRegister(.Edx), op2 = AsmImmediate(msg_len)},
 				AsmSyscall{},
-				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_exit - 1)},
+				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_exit - 1)},
 				AsmInc{op = .Eax},
-				AsmMov{op1 = .Edi, op2 = AsmImmediate(exit_code)},
+				AsmMov{op1 = AsmRegister(.Edi), op2 = AsmImmediate(exit_code)},
 				AsmSyscall{},
 			},
 		},
