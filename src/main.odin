@@ -1,9 +1,7 @@
 package main
 
 import "core:bytes"
-import "core:fmt"
 import "core:io"
-import "core:math"
 import "core:mem"
 import "core:os"
 import "core:strings"
@@ -89,9 +87,6 @@ write_elf_exe :: proc(path: string, code: []AsmBlock) -> (err: io.Error) {
 	}
 	program_headers_size_unpadded: u64 =
 		elf_header_size + cast(u64)len(program_headers) * size_of(ElfProgramHeader)
-	program_headers_alignment := cast(u64)math.next_power_of_two(
-		cast(int)program_headers_size_unpadded,
-	)
 	// Backpatch.
 	program_headers[0].p_filesz = program_headers_size_unpadded
 	program_headers[0].p_memsz = program_headers_size_unpadded
@@ -258,6 +253,16 @@ AsmLea :: struct {
 	op2: AsmOperand,
 }
 
+AsmSub :: struct {
+	op1: AsmRegister,
+	op2: AsmOperand,
+}
+
+AsmAdd :: struct {
+	op1: AsmRegister,
+	op2: AsmOperand,
+}
+
 
 AsmInstruction :: union {
 	AsmSyscall,
@@ -265,6 +270,8 @@ AsmInstruction :: union {
 	AsmInc,
 	AsmPush,
 	AsmLea,
+	AsmSub,
+	AsmAdd,
 }
 
 AsmBlockFlags :: enum {
@@ -305,6 +312,19 @@ asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
 		return 4
 	case .Rsi:
 		return 6
+	}
+	return 0
+}
+
+register_and_opcode_to_modrm :: proc(reg: AsmRegister, opcode: u8) -> u8 {
+	// Plain register, no displacement.
+	mask: u8 = 0b11_00_0000
+
+	switch opcode {
+	case 5:
+		return mask | 0xe8 | asm_register_numeric_value(reg) << 3
+	case:
+		assert(false, "unimplemented")
 	}
 	return 0
 }
@@ -352,7 +372,43 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 
 		bytes.buffer_write(out, []u8{rex, 0x8d, modrm1, modrm2})
 
+	case AsmSub:
+		op2, is_immediate := v.op2.(AsmImmediate)
+		assert(is_immediate, "unimplemented")
+
+		if asm_register_size(v.op1) == 64 {
+			rex: u8 = 0b0100_1000
+			bytes.buffer_write_byte(out, rex)
+		}
+
+		#partial switch y in op2 {
+		case u8:
+			opcode: u8 = 5
+			modrm := register_and_opcode_to_modrm(v.op1, opcode)
+			bytes.buffer_write(out, []u8{0x83, modrm, y})
+		case:
+			assert(false, "unimplemented")
+		}
+
+	case AsmAdd:
+		op2, is_immediate := v.op2.(AsmImmediate)
+		assert(is_immediate, "unimplemented")
+
+		if asm_register_size(v.op1) == 64 {
+			rex: u8 = 0b0100_1000
+			bytes.buffer_write_byte(out, rex)
+		}
+
+		#partial switch y in op2 {
+		case u8:
+			opcode: u8 = 0
+			modrm := register_and_opcode_to_modrm(v.op1, opcode)
+			bytes.buffer_write(out, []u8{0x83, modrm, y})
+		case:
+			assert(false, "unimplemented")
+		}
 	}
+
 
 }
 
@@ -362,11 +418,6 @@ main :: proc() {
 
 	syscall_linux_write: u32 = 1
 	stdout: u32 = 1
-	c1: u8 = 'h'
-	c2: u8 = 'e'
-	c3: u8 = 'l'
-	c4: u8 = 'l'
-	c5: u8 = 'o'
 	msg_len: u32 = 5
 
 	code := []AsmBlock {
@@ -374,11 +425,8 @@ main :: proc() {
 			name = "_start",
 			flags = .Global,
 			instructions = []AsmInstruction {
-				AsmPush{op = AsmImmediate(c1)},
-				AsmPush{op = AsmImmediate(c2)},
-				AsmPush{op = AsmImmediate(c3)},
-				AsmPush{op = AsmImmediate(c4)},
-				AsmPush{op = AsmImmediate(c5)},
+				AsmSub{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
+				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
 				AsmMov{op1 = .Eax, op2 = AsmImmediate(syscall_linux_write)},
 				AsmMov{op1 = .Edi, op2 = AsmImmediate(stdout)},
 				AsmLea{op1 = .Rsi, op2 = AsmEffectiveAddress{op = .Rsp}},
