@@ -224,8 +224,8 @@ AsmImmediate :: union {
 
 AsmDisplacement :: struct {
 	base:  AsmRegister,
-	Index: AsmRegister,
-	Scale: u8,
+	index: u8,
+	scale: u8,
 }
 
 AsmEffectiveAddress :: union {
@@ -438,6 +438,10 @@ main :: proc() {
 			flags = .Global,
 			instructions = []AsmInstruction {
 				AsmSub{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
+				AsmMov {
+					op1 = AsmEffectiveAddress(AsmDisplacement{base = .Rsp, index = 0}),
+					op2 = AsmImmediate(u8('h')),
+				},
 				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_write)},
 				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
 				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_write)},
