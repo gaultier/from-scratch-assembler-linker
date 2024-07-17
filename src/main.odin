@@ -236,7 +236,7 @@ AsmOperand :: union {
 AsmSyscall :: struct {}
 
 AsmMov :: struct {
-	op1: AsmRegister,
+	op1: AsmOperand,
 	op2: AsmOperand,
 }
 
@@ -336,12 +336,13 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 	case AsmSyscall:
 		bytes.buffer_write(out, []u8{0x0f, 0x05})
 	case AsmMov:
+		op1, is_op1_reg := v.op1.(AsmRegister)
 		op2, is_op2_immediate := v.op2.(AsmImmediate)
 		assert(is_op2_immediate, "unimplemented")
 
 		#partial switch y in op2 {
 		case u32:
-			bytes.buffer_write_byte(out, 0xb8 + asm_register_numeric_value(v.op1))
+			bytes.buffer_write_byte(out, 0xb8 + asm_register_numeric_value(op1))
 			value := y
 			bytes.buffer_write(out, mem.ptr_to_bytes(&value))
 		case:
