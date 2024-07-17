@@ -322,7 +322,9 @@ register_and_opcode_to_modrm :: proc(reg: AsmRegister, opcode: u8) -> u8 {
 
 	switch opcode {
 	case 5:
-		return mask | 0xe8 | asm_register_numeric_value(reg) << 3
+		return mask | 0xe8 | asm_register_numeric_value(reg)
+	case 0:
+		return mask | 0xc0 | asm_register_numeric_value(reg)
 	case:
 		assert(false, "unimplemented")
 	}
