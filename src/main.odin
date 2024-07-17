@@ -58,7 +58,7 @@ write_elf_exe :: proc(path: string, code: []AsmBlock) -> (err: io.Error) {
 	}
 
 	out_buffer := bytes.Buffer{}
-	bytes.buffer_grow(&out_buffer, 4 * 1024)
+	bytes.buffer_grow(&out_buffer, 16 * 1024)
 
 	// Header
 
