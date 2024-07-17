@@ -316,7 +316,7 @@ asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
 	return 0
 }
 
-register_and_opcode_to_modrm :: proc(reg: AsmRegister, opcode: u8) -> u8 {
+asm_register_and_opcode_to_modrm :: proc(reg: AsmRegister, opcode: u8) -> u8 {
 	// Plain register, no displacement.
 	mask: u8 = 0b11_00_0000
 
@@ -386,7 +386,7 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		#partial switch y in op2 {
 		case u8:
 			opcode: u8 = 5
-			modrm := register_and_opcode_to_modrm(v.op1, opcode)
+			modrm := asm_register_and_opcode_to_modrm(v.op1, opcode)
 			bytes.buffer_write(out, []u8{0x83, modrm, y})
 		case:
 			assert(false, "unimplemented")
@@ -404,7 +404,7 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		#partial switch y in op2 {
 		case u8:
 			opcode: u8 = 0
-			modrm := register_and_opcode_to_modrm(v.op1, opcode)
+			modrm := asm_register_and_opcode_to_modrm(v.op1, opcode)
 			bytes.buffer_write(out, []u8{0x83, modrm, y})
 		case:
 			assert(false, "unimplemented")
