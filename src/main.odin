@@ -346,6 +346,7 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 	switch v in instr {
 	case AsmSyscall:
 		bytes.buffer_write(out, []u8{0x0f, 0x05})
+
 	case AsmMov:
 		op1_reg, is_op1_reg := v.op1.(AsmRegister)
 		op1_effective_addr, is_op1_effective_addr := v.op1.(AsmEffectiveAddress)
@@ -384,6 +385,7 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		case:
 			assert(false, "unimplemented")
 		}
+
 	case AsmInc:
 		modrm: u8 = 0b1100_0000
 		reg_size := asm_register_size(v.op)
@@ -449,8 +451,6 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 			assert(false, "unimplemented")
 		}
 	}
-
-
 }
 
 main :: proc() {
