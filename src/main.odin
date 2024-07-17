@@ -438,7 +438,7 @@ main :: proc() {
 			flags = .Global,
 			instructions = []AsmInstruction {
 				AsmSub{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
-				AsmMov{op1 = AsmEffectiveAddress{}, op2 = AsmImmediate(syscall_linux_write)},
+				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_write)},
 				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
 				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_write)},
 				AsmMov{op1 = AsmRegister(.Edi), op2 = AsmImmediate(stdout)},
