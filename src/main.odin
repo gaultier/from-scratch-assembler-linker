@@ -305,6 +305,7 @@ asm_register_size :: proc(reg: AsmRegister) -> u8 {
 	return 0
 }
 
+// r8-r15
 asm_register_is_extended :: proc(reg: AsmRegister) -> bool {
 	// FIXME
 	return false
@@ -465,7 +466,7 @@ main :: proc() {
 			name = "_start",
 			flags = .Global,
 			instructions = []AsmInstruction {
-				AsmSub{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
+				AsmSub{op1 = .Rsp, op2 = AsmImmediate(u8(msg_len))},
 				AsmMov {
 					op1 = AsmEffectiveAddress{base = .Rsp, index = 0},
 					op2 = AsmImmediate(u8('h')),
@@ -491,7 +492,7 @@ main :: proc() {
 				AsmLea{op1 = .Rsi, op2 = AsmEffectiveAddress{base = .Rsp}},
 				AsmMov{op1 = AsmRegister(.Edx), op2 = AsmImmediate(msg_len)},
 				AsmSyscall{},
-				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
+				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(msg_len))},
 				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_exit - 1)},
 				AsmInc{op = .Eax},
 				AsmMov{op1 = AsmRegister(.Edi), op2 = AsmImmediate(exit_code)},
