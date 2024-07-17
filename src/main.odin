@@ -253,7 +253,7 @@ AsmPush :: struct {
 
 AsmLea :: struct {
 	op1: AsmRegister,
-	op2: AsmOperand,
+	op2: AsmEffectiveAddress,
 }
 
 AsmSub :: struct {
@@ -285,6 +285,13 @@ AsmBlock :: struct {
 	name:         string,
 	flags:        AsmBlockFlags,
 	instructions: []AsmInstruction,
+}
+
+asm_encode_sib :: proc(address: AsmEffectiveAddress) -> u8 {
+	assert(address.scale <= 0b11)
+	assert(address.index <= 0b111)
+
+	return address.scale << 6 | address.index << 3 | asm_register_numeric_value(address.base)
 }
 
 asm_register_size :: proc(reg: AsmRegister) -> u8 {
@@ -344,21 +351,38 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 	case AsmSyscall:
 		bytes.buffer_write(out, []u8{0x0f, 0x05})
 	case AsmMov:
-		op1, is_op1_reg := v.op1.(AsmRegister)
+		op1_reg, is_op1_reg := v.op1.(AsmRegister)
+		op1_effective_addr, is_op1_effective_addr := v.op1.(AsmEffectiveAddress)
+		assert(is_op1_reg || is_op1_effective_addr, "unimplemented")
 		op2, is_op2_immediate := v.op2.(AsmImmediate)
 		assert(is_op2_immediate, "unimplemented")
 
 		#partial switch y in op2 {
 		case u32:
-			bytes.buffer_write_byte(out, 0xb8 + asm_register_numeric_value(op1))
+			bytes.buffer_write_byte(out, 0xb8 + asm_register_numeric_value(op1_reg))
 			value := y
 			bytes.buffer_write(out, mem.ptr_to_bytes(&value))
 		case u8:
-			assert(!asm_register_is_extended(op1), "unimplemented")
+			assert(is_op1_effective_addr, "unimplemented")
 
 			bytes.buffer_write_byte(out, 0xc6)
-			opcode: u8 = 0
-			bytes.buffer_write_byte(out, asm_register_and_opcode_to_modrm(op1, opcode))
+
+			modrm_mask_displacement_u8: u8 = 0b01_00_0000
+			modrm := modrm_mask_displacement_u8
+			#partial switch op1_effective_addr.base {
+			case .Rsp:
+				modrm |= asm_register_numeric_value(op1_effective_addr.base)
+				bytes.buffer_write_byte(out, modrm)
+
+				base_mask_sp: u8 = 0b100_000
+				index_mask_sp: u8 = 0b100
+				bytes.buffer_write_byte(out, base_mask_sp | index_mask_sp)
+				bytes.buffer_write_byte(out, op1_effective_addr.index)
+
+			case:
+				assert(false, "unimplemented")
+			}
+
 			bytes.buffer_write_byte(out, y)
 
 		case:
@@ -385,8 +409,9 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 		modrm1: u8 = asm_register_numeric_value(v.op1) << 3 | 0b100
 
 
-		op2_reg, is_op2_reg := v.op2.(AsmRegister)
-		assert(is_op2_reg, "unimplemented")
+		op2_reg := v.op2.base
+		assert(v.op2.index == 0, "unimplemented")
+		assert(v.op2.scale == 0, "unimplemented")
 
 		modrm2: u8 = asm_register_numeric_value(op2_reg) << 3 | 0b100
 
@@ -450,13 +475,28 @@ main :: proc() {
 					op1 = AsmEffectiveAddress{base = .Rsp, index = 0},
 					op2 = AsmImmediate(u8('h')),
 				},
-				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_write)},
-				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
+				AsmMov {
+					op1 = AsmEffectiveAddress{base = .Rsp, index = 1},
+					op2 = AsmImmediate(u8('e')),
+				},
+				AsmMov {
+					op1 = AsmEffectiveAddress{base = .Rsp, index = 2},
+					op2 = AsmImmediate(u8('l')),
+				},
+				AsmMov {
+					op1 = AsmEffectiveAddress{base = .Rsp, index = 3},
+					op2 = AsmImmediate(u8('l')),
+				},
+				AsmMov {
+					op1 = AsmEffectiveAddress{base = .Rsp, index = 4},
+					op2 = AsmImmediate(u8('o')),
+				},
 				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_write)},
 				AsmMov{op1 = AsmRegister(.Edi), op2 = AsmImmediate(stdout)},
 				AsmLea{op1 = .Rsi, op2 = AsmEffectiveAddress{base = .Rsp}},
 				AsmMov{op1 = AsmRegister(.Edx), op2 = AsmImmediate(msg_len)},
 				AsmSyscall{},
+				AsmAdd{op1 = .Rsp, op2 = AsmImmediate(u8(5))},
 				AsmMov{op1 = AsmRegister(.Eax), op2 = AsmImmediate(syscall_linux_exit - 1)},
 				AsmInc{op = .Eax},
 				AsmMov{op1 = AsmRegister(.Edi), op2 = AsmImmediate(exit_code)},
