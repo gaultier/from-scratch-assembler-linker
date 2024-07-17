@@ -44,7 +44,6 @@ ElfSectionHeader :: struct #packed {
 #assert(size_of(ElfSectionHeader) == 64)
 
 write_elf_exe :: proc(path: string, code: []AsmBlock) -> (err: io.Error) {
-
 	code_encoded := []u8{}
 	{
 		out_code := bytes.Buffer{}
@@ -61,7 +60,6 @@ write_elf_exe :: proc(path: string, code: []AsmBlock) -> (err: io.Error) {
 	bytes.buffer_grow(&out_buffer, 16 * 1024)
 
 	// Header
-
 	elf_header_size: u64 = 64
 	start_vm: u64 = 1 << 22
 	page_size: u64 = 0x1000
@@ -144,7 +142,6 @@ write_elf_exe :: proc(path: string, code: []AsmBlock) -> (err: io.Error) {
 		section_header_table_offset: u64 = page_size + cast(u64)len(code_encoded) + strings_size
 		bytes.buffer_write(&out_buffer, mem.ptr_to_bytes(&section_header_table_offset)) or_return
 
-
 		bytes.buffer_write(&out_buffer, []u8{0, 0, 0, 0}) or_return // Flags.
 		assert(len(out_buffer.buf) == 52)
 
@@ -221,8 +218,6 @@ AsmImmediate :: union {
 	u32,
 	u64,
 }
-
-AsmDisplacement :: struct {}
 
 AsmEffectiveAddress :: struct {
 	base:  AsmRegister,
