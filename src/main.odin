@@ -303,6 +303,11 @@ asm_register_size :: proc(reg: AsmRegister) -> u8 {
 	return 0
 }
 
+asm_register_is_extended :: proc(reg: AsmRegister) -> bool {
+	// FIXME
+	return false
+}
+
 asm_register_numeric_value :: proc(reg: AsmRegister) -> u8 {
 	switch reg {
 	case .Eax:
@@ -348,6 +353,14 @@ encode_asm_instruction :: proc(out: ^bytes.Buffer, instr: AsmInstruction) {
 			bytes.buffer_write_byte(out, 0xb8 + asm_register_numeric_value(op1))
 			value := y
 			bytes.buffer_write(out, mem.ptr_to_bytes(&value))
+		case u8:
+			assert(!asm_register_is_extended(op1), "unimplemented")
+
+			bytes.buffer_write_byte(out, 0xc6)
+			opcode: u8 = 0
+			bytes.buffer_write_byte(out, asm_register_and_opcode_to_modrm(op1, opcode))
+			bytes.buffer_write_byte(out, y)
+
 		case:
 			assert(false, "unimplemented")
 		}
